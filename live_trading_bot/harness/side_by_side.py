@@ -232,6 +232,16 @@ def main():
         env["DRY_RUN"] = "true" if is_dry else "false"
         env["DB_PATH"] = db_path
         env["LOG_PATH"] = log_path
+        # Each dry-run instance MUST have its own state file.  Without this,
+        # all dry bots share /tmp/dry_run_state.json (the DRY_RUN_STATE_PATH
+        # default), so they stomp on each other's positions on every save().
+        # The result is a read-modify-write race: bot A opens a position,
+        # bot B reads the file and also sees that position, then both try to
+        # manage / close it simultaneously — inflating the dry trade count and
+        # producing spurious "Position cleared on sync" events.
+        # Incident 2026-04-07: dry=31 trades vs live=6, 6 dry sync-clears.
+        if is_dry:
+            env["DRY_RUN_STATE_PATH"] = os.path.join(inst_dir, "dry_run_state.json")
         # Only override BAR_INTERVAL if --interval was passed explicitly.
         # Otherwise inherit from the environment (e.g. Railway env var) so
         # the harness doesn't silently force 1m bars when the live bot is
